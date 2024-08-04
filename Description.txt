@@ -1,0 +1,18 @@
+Italiano
+
+I dati sono divisi in elementi di disturbo (d), ingresso (u), stato (x), uscita (y, corrispondenti allo stato al passo successivo, x(k+1) per intenderci), tempo (t) e schedule (proxy)
+I dati sono organizzati come segue:
+- I dati in u corrispondono ai 10 set-point delle 10 stanze
+- I dati in x sono rappresentati dall'energia apparente trifase totale, dell'unità esterna e delle unità interne nelle prime tre posizioni;  dalla potenza apparente trifase totale, dell'unità esterna e delle unità interne nelle ultime tre posizioni; temperature delle 10 stanze nel mezzo (dettaglio: non vanno da 1 a 10, ma contano come 1,10,2,3,...,9, vale anche per gli ingressi)
+- I dati in proxy corrispondono al (in ordine) mese dell'anno, ora del giorno, giorno della settimana
+- I dati in d corrispondono a (in ordine) temperatura esterna, umidità esterna, wind chill, heat chill (non mi è mai stata chiara la differenza, ma contano poco), pressione (bar), pioggia, radiazione solare
+
+
+English
+
+Data are divided in disturbaces (d), inputs (u), states (x), outputs (y, corresponding to the states at the next step, i.e. x(k+1)), time (t) e schedule (proxy)
+Data are organized as follows:
+- Data in u correspond to the 10 set-points of the 10 rooms
+- Data in x are the total apparent energy, external unit apparent energy and internal units (splits) apparent energy in the first three positions;  total three-phase apparent power, external unit apparent power and internal units (splits) apparent power in the last three positions; temperatures of the 10 rooms in the middle (detail: rooms do not count in order 1, 2, ..., 10, but 1, 10, 2, 3,..., 9, same holds for the inputs)
+- Data in proxy correspond to (in order) month of the year, hour of the day, day of the week
+- Data in d correspond to (in order) external temperature, external humidity, wind chill, heat chill (they are not that important, you can also neglect them), pressure (bar), rain, solar radiation
