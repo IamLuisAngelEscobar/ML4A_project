@@ -57,32 +57,8 @@ Tbl_E3 = array2table(E3, 'VariableNames',E_Col);
 energy = {Tbl_E1,Tbl_E2,Tbl_E3};
 
 
-%% STEP 2: Feature Selection For Lagging
-
-for cellItem = 1:3
-
-        Data = eval(['Tbl_E' num2str(cellItem)]);
-        fs_model1 = fitlm(Data);
-        coefficients = table2array(fs_model1.Coefficients(:, 'Estimate'));
-        feature_names = Data.Properties.VariableNames;
-        [~, idx] = sort(abs(coefficients(2:end)), 'descend');
-        sorted_coefficients = coefficients(idx + 1);
-        sorted_feature_names = feature_names(idx);
-
-        best_features = sorted_feature_names(:, 1:3);   
-
-        Energy_Best_3F(cellItem,:) = best_features;
-
-end
-% Extract unique best features
-Ebest = unique(Energy_Best_3F(:));
-Ebest = Ebest(1:3,1);
-
-% Display best features
-disp('Best 3 features for Lagging Energy Data:');
-disp(Ebest);
-
-%% STEP 2.2: Feature Selection For Lagging (version 2)
+%% STEP 2: Feature Selection For Lagging [we need to address any
+% multicolinearity issue]
 for cellItem = 1:3
     
     Data = energy{cellItem};  % Access the table directly from the cell array
@@ -90,11 +66,14 @@ for cellItem = 1:3
     coefficients = table2array(fs_model1.Coefficients(:, 'Estimate'));
     feature_names = Data.Properties.VariableNames;
     [~, idx] = sort(abs(coefficients(2:end)), 'descend');
-    sorted_feature_names = feature_names(idx + 1);  % Exclude intercept
-
+    %If the intercept is different from zero
+    %sorted_feature_names = feature_names(idx + 1);
+    %Since the intercept is zero 
+    sorted_feature_names = feature_names(idx);
     best_features = sorted_feature_names(1:3);  % Select top 3 features
 
     Energy_Best_3F(cellItem,:) = best_features;
+
 end
 
 % Extract unique best features
@@ -105,66 +84,21 @@ Ebest = Ebest(1:3);  % Select first 3 unique features
 disp('Best 3 features for Lagging Energy Data:');
 disp(Ebest);
 
-%% STEP 2.3: Feature Selcetion For Lagging 
-
-% Initialize storage for top features
-Energy_Best_3F = cell(3, 3);
-
-for cellItem = 1:3
-    % Access the dataset
-    Data = energy{cellItem};
-    
-    % Fit the linear model
-    fs_model1 = fitlm(Data);
-    
-    % Extract coefficients and feature names
-    coefficients = table2array(fs_model1.Coefficients(:, 'Estimate'));
-    feature_names = Data.Properties.VariableNames;
-    
-    % Sort coefficients (excluding intercept)
-    [~, idx] = sort(abs(coefficients(2:end)), 'descend');
-    
-    % Sort features based on coefficients
-    sorted_feature_names = feature_names(idx + 1);
-    
-    % Select the top 3 features
-    best_features = sorted_feature_names(1:3);
-    
-    % Store the top features
-    Energy_Best_3F(cellItem, :) = best_features;
-end
-
-% Extract unique best features
-all_features = unique(Energy_Best_3F(:));
-Ebest = all_features(1:min(3, numel(all_features))); % Handle fewer than 3 unique features
-
-% Display the best features
-disp('Best 3 features for Lagging Energy Data:');
-disp(Ebest);
-%% STEP 2.4
-numEnergyTypes = 3;
-Energy_Best_3F = cell(numEnergyTypes, 1);
-
-for cellItem = 1:numEnergyTypes
-    Data = energy{cellItem}; % Access data directly from cell array
-    fs_model1 = fitlm(Data);
-    coefficients = table2array(fs_model1.Coefficients(:, 'Estimate'));
-    feature_names = Data.Properties.VariableNames;
-    [~, idx] = sort(abs(coefficients(2:end)), 'descend');
-    sorted_coefficients = coefficients(idx + 1);
-    sorted_feature_names = feature_names(idx);
-
-    best_features = sorted_feature_names(1:3); % Select top 3 features
-    Energy_Best_3F{cellItem} = best_features; % Store in cell array
-end
-
-% Extract unique best features
-Ebest = unique([Energy_Best_3F{:}]);
-Ebest = Ebest(1:3); % Ensure to have only top 3 features if there are duplicates
-
-% Display best features
-disp('Best 3 features for Lagging Energy Data:');
-disp(Ebest);
+% Another possible approach is to consider the top 3 values independently
+% instead of choosing the 3 most important variables Ebest for E1, E2 and E3
+% i.e., 
+% E1
+%   1. Current Energy 
+%   2. R2 
+%   3. R9
+% E2
+%   1. Current Energy 
+%   2. R2 
+%   3. R9
+% E3
+%   1. Current Energy 
+%   2. R9 
+%   3. R8
 
 %% STEP 3: Create Lag Matrices for Energy
 
