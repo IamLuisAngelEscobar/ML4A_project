@@ -2,26 +2,44 @@
 clc;
 close all;
 
-
 %% ENERGY PREDICTION
 
 % Load Energy Data.
-
-Train_Data = load("redhouseTrain.mat");
+directory = '/Users/luisescobar/Downloads/Summer_attempt_2024/ML4A/Project';
+filename = 'redhouseTrain.mat';
+Train_Data = load(fullfile(directory, filename));
 
 %Train_Data = Train_Data; 
 d = Train_Data.d;
 proxy = Train_Data.proxy;
+%For the time varaible we are using the unix time stamp 
+% which is a way to track time as a running total of 
+% seconds. This count starts at the Unix Epoch on 
+% January 1st, 1970 at UTC.
 t = Train_Data.t;
 u = Train_Data.u;
 x = Train_Data.x;
 y = Train_Data.y;
 
 %% STEP 1: Create Tables for energy
-
+% About the energy
+% E1 total apparent energy
+% E2 external unit apparent energy
+% E3 internal units (splits) apparent energy
+% The document Description.txt does not offer a detailed
+% explanation about the different energies and any possible relation
+% between them. For the project this situation seems not to be 
+% relevant, we can pick one of them and see how good is the prediction
 E_Col = {'time', 'Current Energy', 'R1','R2','R3','R4','R5', 'R6','R7','R8','R9','R10', 'Energy Outputs'};
 
+% E1
+% t': time vector transpose,
+% x(1,:)': first column of matrix x (corresponding to E1)
+% x(4:13,:)': columns 4 to 13 of matrix x (temperature states of room 1 to
+% 10)
+% y(1,:)': first column of matrix x (corresponding to E1 predictions)
 E1 = [t', x(1,:)', x(4:13,:)',  y(1,:)'];
+% Missing values in these data arrays are filled using linear interpolation
 E1 = fillmissing(E1,"linear");
 
 E2 = [t', x(2,:)', x(4:13,:)',  y(2,:)'];
@@ -30,6 +48,7 @@ E2 = fillmissing(E2,"linear");
 E3 = [t', x(3,:)', x(4:13,:)',  y(3,:)'];
 E3 = fillmissing(E3,"linear");
 
+% We save the data for each energy in a table
 Tbl_E1 = array2table(E1, 'VariableNames',E_Col);
 Tbl_E2 = array2table(E2, 'VariableNames',E_Col);
 Tbl_E3 = array2table(E3, 'VariableNames',E_Col);
@@ -41,7 +60,7 @@ energy = {Tbl_E1,Tbl_E2,Tbl_E3};
 %% STEP 2: Feature Selection For Lagging
 
 for cellItem = 1:3
-        
+
         Data = eval(['Tbl_E' num2str(cellItem)]);
         fs_model1 = fitlm(Data);
         coefficients = table2array(fs_model1.Coefficients(:, 'Estimate'));
@@ -49,15 +68,99 @@ for cellItem = 1:3
         [~, idx] = sort(abs(coefficients(2:end)), 'descend');
         sorted_coefficients = coefficients(idx + 1);
         sorted_feature_names = feature_names(idx);
-    
+
         best_features = sorted_feature_names(:, 1:3);   
 
         Energy_Best_3F(cellItem,:) = best_features;
 
-   end
+end
 % Extract unique best features
 Ebest = unique(Energy_Best_3F(:));
 Ebest = Ebest(1:3,1);
+
+% Display best features
+disp('Best 3 features for Lagging Energy Data:');
+disp(Ebest);
+
+%% STEP 2.2: Feature Selection For Lagging (version 2)
+for cellItem = 1:3
+    
+    Data = energy{cellItem};  % Access the table directly from the cell array
+    fs_model1 = fitlm(Data);
+    coefficients = table2array(fs_model1.Coefficients(:, 'Estimate'));
+    feature_names = Data.Properties.VariableNames;
+    [~, idx] = sort(abs(coefficients(2:end)), 'descend');
+    sorted_feature_names = feature_names(idx + 1);  % Exclude intercept
+
+    best_features = sorted_feature_names(1:3);  % Select top 3 features
+
+    Energy_Best_3F(cellItem,:) = best_features;
+end
+
+% Extract unique best features
+Ebest = unique(Energy_Best_3F(:), 'stable');  % Ensure stable ordering
+Ebest = Ebest(1:3);  % Select first 3 unique features
+
+% Display best features
+disp('Best 3 features for Lagging Energy Data:');
+disp(Ebest);
+
+%% STEP 2.3: Feature Selcetion For Lagging 
+
+% Initialize storage for top features
+Energy_Best_3F = cell(3, 3);
+
+for cellItem = 1:3
+    % Access the dataset
+    Data = energy{cellItem};
+    
+    % Fit the linear model
+    fs_model1 = fitlm(Data);
+    
+    % Extract coefficients and feature names
+    coefficients = table2array(fs_model1.Coefficients(:, 'Estimate'));
+    feature_names = Data.Properties.VariableNames;
+    
+    % Sort coefficients (excluding intercept)
+    [~, idx] = sort(abs(coefficients(2:end)), 'descend');
+    
+    % Sort features based on coefficients
+    sorted_feature_names = feature_names(idx + 1);
+    
+    % Select the top 3 features
+    best_features = sorted_feature_names(1:3);
+    
+    % Store the top features
+    Energy_Best_3F(cellItem, :) = best_features;
+end
+
+% Extract unique best features
+all_features = unique(Energy_Best_3F(:));
+Ebest = all_features(1:min(3, numel(all_features))); % Handle fewer than 3 unique features
+
+% Display the best features
+disp('Best 3 features for Lagging Energy Data:');
+disp(Ebest);
+%% STEP 2.4
+numEnergyTypes = 3;
+Energy_Best_3F = cell(numEnergyTypes, 1);
+
+for cellItem = 1:numEnergyTypes
+    Data = energy{cellItem}; % Access data directly from cell array
+    fs_model1 = fitlm(Data);
+    coefficients = table2array(fs_model1.Coefficients(:, 'Estimate'));
+    feature_names = Data.Properties.VariableNames;
+    [~, idx] = sort(abs(coefficients(2:end)), 'descend');
+    sorted_coefficients = coefficients(idx + 1);
+    sorted_feature_names = feature_names(idx);
+
+    best_features = sorted_feature_names(1:3); % Select top 3 features
+    Energy_Best_3F{cellItem} = best_features; % Store in cell array
+end
+
+% Extract unique best features
+Ebest = unique([Energy_Best_3F{:}]);
+Ebest = Ebest(1:3); % Ensure to have only top 3 features if there are duplicates
 
 % Display best features
 disp('Best 3 features for Lagging Energy Data:');
