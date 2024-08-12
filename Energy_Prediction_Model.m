@@ -1,0 +1,300 @@
+%% ENERGY PREDICTION
+%clear;
+clc;
+close all;
+
+%% STEP 0: Load the data
+
+directory = '/Users/luisescobar/Downloads/Summer_attempt_2024/ML4A/Project';
+filename = 'redhouseTrain.mat';
+Train_Data = load(fullfile(directory, filename));
+
+%Train_Data = Train_Data; 
+d = Train_Data.d;
+%proxy = Train_Data.proxy;
+%For the time varaible we are using the unix time stamp 
+% which is a way to track time as a running total of 
+% seconds. This count starts at the Unix Epoch on 
+% January 1st, 1970 at UTC.
+t = Train_Data.t;
+u = Train_Data.u;
+x = Train_Data.x;
+y = Train_Data.y;
+
+%% STEP 1: Create Tables for energy
+% About the energy
+% E1 total apparent energy
+% E2 external unit apparent energy
+% E3 internal units (splits) apparent energy
+% The document Description.txt does not offer a detailed
+% explanation about the different energies and any possible relation
+% between them. For the project this situation seems not to be 
+% relevant, we can pick one of them and see how good is the prediction
+E_Col = {'time', 'Current Energy', 'R1','R2','R3','R4','R5', 'R6','R7','R8','R9','R10', 'Energy Outputs'};
+
+% E1
+% t': time vector transpose,
+% x(1,:)': first column of matrix x (corresponding to E1)
+% x(4:13,:)': columns 4 to 13 of matrix x (temperature states of room 1 to
+% 10)
+% y(1,:)': first column of matrix x (corresponding to E1 predictions)
+E1 = [t', x(1,:)', x(4:13,:)',  y(1,:)'];
+% Missing values in these data arrays are filled using linear interpolation
+E1 = fillmissing(E1,"linear");
+
+E2 = [t', x(2,:)', x(4:13,:)',  y(2,:)'];
+E2 = fillmissing(E2,"linear");
+
+E3 = [t', x(3,:)', x(4:13,:)',  y(3,:)'];
+E3 = fillmissing(E3,"linear");
+
+% We save the data for each energy in a table
+Tbl_E1 = array2table(E1, 'VariableNames',E_Col);
+Tbl_E2 = array2table(E2, 'VariableNames',E_Col);
+Tbl_E3 = array2table(E3, 'VariableNames',E_Col);
+
+% store tables in Cell arrays. 
+energy = {Tbl_E1,Tbl_E2,Tbl_E3};
+
+%% STEP 1.1: Multicollinearity
+%Heatmap for E1, E2, E3 
+corrMatrix = corr(E1);
+heatmap(corrMatrix);
+%As expected we have a high correlation between rooms. 
+%How this affect the decision of choosing some of them for the regression?
+
+%% STEP 2: Feature Selection For Lagging [we need to address any
+% multicolinearity issue]
+for cellItem = 1:3
+    
+    Data = energy{cellItem};  % Access the table directly from the cell array
+    fs_model1 = fitlm(Data);
+    coefficients = table2array(fs_model1.Coefficients(:, 'Estimate'));
+    feature_names = Data.Properties.VariableNames;
+    [~, idx] = sort(abs(coefficients(2:end)), 'descend');
+    %If the intercept is different from zero
+    %sorted_feature_names = feature_names(idx + 1);
+    %Since the intercept is zero 
+    sorted_feature_names = feature_names(idx);
+    best_features = sorted_feature_names(1:3);  % Select top 3 features
+
+    Energy_Best_3F(cellItem,:) = best_features;
+
+end
+
+% Extract unique best features
+Ebest = unique(Energy_Best_3F(:), 'stable');  % Ensure stable ordering
+Ebest = Ebest(1:3);  % Select first 3 unique features
+
+% Display best features
+disp('Best 3 features for Lagging Energy Data:');
+disp(Ebest);
+
+% Another possible approach is to consider the top 3 values independently
+% instead of choosing the 3 most important variables Ebest for E1, E2 and E3
+% i.e., 
+% E1
+%   1. Current Energy 
+%   2. R2 
+%   3. R9
+% E2
+%   1. Current Energy 
+%   2. R2 
+%   3. R9
+% E3
+%   1. Current Energy 
+%   2. R9 
+%   3. R8
+
+%% STEP 3: Create Lag Matrices for Energy
+
+lags = [1];
+lag_energy = cell(1,3);
+   for item = 1:3
+    table= energy{item};
+    lag_matrix = lagmatrix(table, lags, 'DataVariables', ["Current Energy", "R2", "R8"]); %arbitrarily selected lag variables
+    lag_mat = lag_matrix(:, 2:end);
+    lag_mat = [table(:, 1:end-1), lag_mat(:, {'Lag1Current Energy', 'Lag1R2', 'Lag1R8'}), table(:, end)];
+    lag_mat = rmmissing(lag_mat);
+    lag_energy{item}=lag_mat;
+    eval(['Tbl_E' num2str(item) '_lag = lag_mat;']);
+   end
+
+%% STEP 3: Create Lag Matrices for Energy (version 2)
+% Define the lags <--- here we have to add the lags for 2, 10, 20, 30
+% ,40,50,60 min. However, another approach is to use the method of WQU to
+% identify until which lag do we have important prediction information
+lags = [1];
+
+% Initialize a struct to hold the lagged energy tables
+lag_energy_struct = struct();
+
+% Iterate over each energy table
+for item = 1:3
+    % Extract the current energy table
+    table = energy{item};
+    
+    % Create the lag matrix for the specified variables
+    lag_matrix = lagmatrix(table, lags, 'DataVariables', ["Current Energy", "R2", "R9"]);
+    
+    % Extract the lagged variables (excluding the first column which is the original variable)
+    lag_mat = lag_matrix(:, 2:end);
+    
+    % Combine the original table with the lagged variables [why do we want to do this?]
+    lag_mat = [table(:, 1:end-1), lag_mat(:, {'Lag1Current Energy', 'Lag1R2', 'Lag1R9'}), table(:, end)];
+    
+    % Remove any missing values resulting from the lagging process
+    lag_mat = rmmissing(lag_mat);
+    
+    % Store the lagged table in the struct
+    lag_energy_struct.(['Tbl_E' num2str(item) '_lag']) = lag_mat;
+    
+    % Optionally, also store in the cell array if needed
+    %lag_energy{item} = lag_mat;
+end
+
+% Access the lagged tables using the struct fields
+Tbl_E1_lag = lag_energy_struct.Tbl_E1_lag;
+Tbl_E2_lag = lag_energy_struct.Tbl_E2_lag;
+Tbl_E3_lag = lag_energy_struct.Tbl_E3_lag;
+
+
+   
+%% STEP 4: Create a Linear Model For Energy 1,2,3
+NoEnergyTables = 3;
+
+for i = 1:NoEnergyTables
+    data = energy{i};
+    Energy_model = fitlm(data(:, 2:end));
+end
+
+%% Create and Train Model for Lagged Data
+NoEnergyTables = 3;
+
+for i = 1:NoEnergyTables
+    data = lag_energy{i};
+    LEmodel = fitlm(data(:, 2:end));   
+end
+
+%% NRMSE for Energy 
+% Energy Prediction
+NRMSE_E = zeros(3,2);
+
+for i = 1:3
+data = table2array(energy{i});
+data1 = table2array(lag_energy{i});
+
+X_train = data(:,2:end-1);
+y_train = data(:,end);
+y_pred_NL = predict(Energy_model,X_train);
+NRMSE_E(i,1) = 100*calculate_nrmse(y_train,y_pred_NL); % in percentage
+
+X_trL = data1(:,2:end-1);
+y_trL = data1(:,end);
+y_pred_L = predict(LEmodel,X_trL);
+NRMSE_E(i,2) = 100*calculate_nrmse(y_trL,y_pred_L); % in percentage
+
+end
+NRMSE_E = array2table(NRMSE_E, VariableNames={'M-NLE','M-LE'},RowNames={'E1','E2','E3'});
+
+%% Visualize The NRMSE for Energy
+MAE_E = table2array(NRMSE_E);
+
+% Sort Avg_Error and get the corresponding indices
+[sortedError, sortedIndices] = sort(MAE_E);
+
+% Create a bar plot with sorted data
+bar(sortedError);
+% Customize the plot
+ylabel('NRMSE');
+title('NRMSE values Lagged vs NoN Lagged Data');
+xticklabels({'E1', 'E2', 'E3'}); % Custom x-axis labels
+legend('Lagged Data', 'Non Lagged Data'); % Add legend with custom labels
+grid on;
+
+%% SUMMARY
+% Best Performing Model for energy
+% M_LE
+
+%% TESTING THE MODEL
+
+Data1 = load("redhouseTest1.mat");
+%Data2 = load("redhouseTest2.mat");
+
+Data = Data1; % select the testing data set
+
+proxy = Data.proxy;
+test_t = Data.t;
+test_u = Data.u;
+test_x = Data.x;
+test_y = Data.y;
+
+%% GENERATE TESTING DATA
+
+E_Col = {'time', 'Current Energy', 'R1','R2','R3','R4','R5', 'R6','R7','R8','R9','R10', 'Energy Outputs'};
+
+TestE1 = [test_t', test_x(1,:)', test_x(4:13,:)',  test_y(1,:)'];
+TestE1 = fillmissing(TestE1,"linear");
+
+TestE2 = [test_t', test_x(2,:)', test_x(4:13,:)',  test_y(2,:)'];
+TestE2 = fillmissing(TestE2,"linear");
+
+TestE3 = [test_t', test_x(3,:)', test_x(4:13,:)',  test_y(3,:)'];
+TestE3 = fillmissing(TestE3,"linear");
+
+TestTbl_E1 = array2table(TestE1, 'VariableNames',E_Col);
+TestTbl_E2 = array2table(TestE2, 'VariableNames',E_Col);
+TestTbl_E3 = array2table(TestE3, 'VariableNames',E_Col);
+
+% store tables in Cell arrays. 
+TestEnergy = {TestTbl_E1,TestTbl_E2,TestTbl_E3};
+
+%% GENERATE LAGGED ENERGY DATA
+lags = [1];
+Testlag_energy = cell(1,3);
+   for item = 1:3
+    table= TestEnergy{item};
+    lag_matrix = lagmatrix(table, lags, 'DataVariables', ["Current Energy", "R2", "R8"]); %arbitrarily selected lag variables
+    lag_mat = lag_matrix(:, 2:end);
+    lag_mat = [table(:, 1:end-1), lag_mat(:, {'Lag1Current Energy', 'Lag1R2', 'Lag1R8'}), table(:, end)];
+    lag_mat = rmmissing(lag_mat);
+    Testlag_energy{item}=lag_mat;
+   end
+
+   %% PREDICT and FIND NRMSE
+
+NRMSE_E_Test = zeros(3,2);
+
+for i = 1:3
+data = table2array(TestEnergy{i});
+data1 = table2array(Testlag_energy{i});
+
+X_test = data(:,2:end-1);
+y_test = data(:,end);
+y_pred_NL = predict(Energy_model,X_test);
+NRMSE_E_Test(i,1) = 100*calculate_nrmse(y_test,y_pred_NL); % in percentage
+
+X_tstL = data1(:,2:end-1);
+y_tstL = data1(:,end);
+y_pred_RF = predict(LEmodel,X_tstL);
+NRMSE_E_Test(i,2) = 100*calculate_nrmse(y_tstL,y_pred_RF); % in percentage
+end
+NRMSE_E_Test = array2table(NRMSE_E_Test, VariableNames={'M-NLE','M-LE'},RowNames={'TestE1','TestE2','TestE3'});
+
+%% Visualize The NRMSE for Energy
+MAE_TestE = table2array(NRMSE_E_Test);
+
+% Sort Avg_Error and get the corresponding indices
+[sortedError, sortedIndices] = sort(MAE_TestE);
+
+% Create a bar plot with sorted data
+bar(sortedError);
+% Customize the plot
+ylabel('NRMSE');
+title('NRMSE values Lagged vs NoN Lagged Data');
+xticklabels({'TestE1', 'TestE2', 'TestE3'}); % Custom x-axis labels
+legend('Lagged Data', 'Non Lagged Data'); % Add legend with custom labels
+grid on;
+%% 
+ % save the plot to a file
+saveas(gcf,'Energy NRMSE Comparison.png');
